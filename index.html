@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta charset="utf-8">
+<title>Tomsk 324</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="dashboard_bg"></div>
+<div id="dashboard_root">
+<!-- Шторка обоев -->
+<div id="sidebar" class="sidebar">
+  <div class="sidebar__topbar">
+    <div>
+      <div class="sidebar__eyebrow">Персонализация</div>
+      <h3>Ручной выбор обоев</h3>
+    </div>
+    <button id="closeSidebar" class="close-btn" aria-label="Закрыть шторку">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 8l8 8M16 8l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="wallpaper-grid">
+    <div class="wallpaper-item" data-src="images/Bg.jpg"><img src="images/Bg.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-1.jpg"><img src="images/Bg-1.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-3.jpg"><img src="images/Bg-3.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-4.jpg"><img src="images/Bg-4.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-5.jpg"><img src="images/Bg-5.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-6.jpg"><img src="images/Bg-6.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-7.jpg"><img src="images/Bg-7.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-8.jpg"><img src="images/Bg-8.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-9.jpg"><img src="images/Bg-9.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-10.jpg"><img src="images/Bg-10.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-11.jpg"><img src="images/Bg-11.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-12.jpg"><img src="images/Bg-12.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-13.jpg"><img src="images/Bg-13.jpg" alt=""></div>
+    <div class="wallpaper-item" data-src="images/Bg-14.jpg"><img src="images/Bg-14.jpg" alt=""></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div></div>
+  </div>
+</div>
+
+<!-- Основная панель -->
+<div class="dashboard">
+  <!-- Климат -->
+  <div class="widget_climate widget">
+    <div class="climate-grid">
+      <div class="climate_slot" data-climate-slot="1"></div>
+      <div class="climate_slot" data-climate-slot="2"></div>
+      <div class="climate_slot" data-climate-slot="3"></div>
+      <div class="climate_slot" data-climate-slot="4"></div>
+    </div>
+    <button type="button" class="climate-off-all inactive" id="climateOffAll" aria-label="Выключить всё">×</button>
+  </div>
+
+    <!-- Время -->
+    <div class="widget widget_time">
+      <div id="flipClock" class="flip-clock">--:--</div>
+      <div id="dateDisplay" class="date-display"></div>
+    </div>
+
+  <!-- Плеер -->
+  <div class="widget_player widget">
+    <div class="widget_player__image"><img src="images/img.jpg" alt=""></div>
+    <div class="widget_player__right">
+      <div class="widget_player__top">
+        <div class="widget_player__titles">
+          <div class="widget_player__title"><span class="widget_player__title_text">Название песни</span></div>
+          <div class="widget_player__artist">Имя артиста</div>
+          <button class="widget_player__source widget_player__source--chip is-hidden" type="button" aria-label="Открыть источник музыки"></button>
+        </div>
+      </div>
+      <div class="widget_player__buttons" aria-label="Управление воспроизведением">
+        <button id="player__prev" class="widget_player__prev widget_player__btn" type="button" aria-label="Назад">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6v12M18 7l-8 5 8 5V7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="player__toggle" class="widget_player__btn widget_player__btn--primary" type="button" aria-label="Воспроизвести">
+<svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="white"/></svg>
+<svg id="pauseIcon" viewBox="0 0 24 24" style="display:none;"><path d="M6 5h4v14H6zm8 0h4v14h-4z" fill="white"/></svg>
+</button>
+        <button id="player__next" class="widget_player__next widget_player__btn" type="button" aria-label="Вперёд">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6v12M6 7l8 5-8 5V7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="widget_player__track_row">
+        <div class="widget_player__track_line" aria-label="Прогресс трека">
+          <div class="widget_player__track_progress" style="width:0%"></div>
+          <div class="widget_player__track_dot" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Приложения -->
+  <div class="widget_apps widget">
+    <div class="app_slot" data-slot="1"></div>
+    <div class="app_slot" data-slot="2"></div>
+    <div class="app_slot" data-slot="3"></div>
+    <div class="app_slot" data-slot="4"></div>
+  </div>
+
+  <!-- Боковые кнопки -->
+  <div class="right-buttons" aria-label="Быстрые действия">
+    <div id="btnWeather" class="widget_buttons" title="Погода">
+      <span class="right-button__halo" aria-hidden="true"></span>
+      <img class="right-button__icon" src="icons/oem-weather.svg" alt="Погода">
+          </div>
+    <div id="openSidebar" class="widget_buttons" title="Установленные приложения">
+      <span class="right-button__halo" aria-hidden="true"></span>
+      <img class="right-button__icon" src="icons/Apps.svg" alt="Установленные приложения">
+          </div>
+    <div id="btnAttention" class="widget_buttons" title="Внимание">
+      <span class="right-button__halo" aria-hidden="true"></span>
+      <img class="right-button__icon" src="icons/oem-attention.svg" alt="Внимание">
+          </div>
+  </div>
+</div>
+
+
+
+<!-- Мини-строка Внимания -->
+<div id="attention-mini" class="attention-mini" aria-live="polite">
+  <span id="attention-mini-status"></span>
+  <span class="attention-mini__dot">·</span>
+  <span id="attention-mini-speed">—</span>
+</div>
+
+<!-- Шторка погоды -->
+<div id="weather-drawer" class="picker-drawer left-drawer">
+  <div class="drawer-header"><span class="drawer-title">Погода</span><button class="drawer-close" id="weather-drawer-close">✕</button></div>
+  <div class="weather-card">
+    <div class="weather-card__top">
+      <div class="weather-card__top-text">
+        <div id="weather-location" class="weather-card__eyebrow">Определяем местоположение…</div>
+        <div id="weather-status" class="weather-card__status">Загрузка…</div>
+      </div>
+      <div class="weather-card__hero">
+        <div id="weather-icon" class="weather-card__icon" aria-hidden="true">☁️</div>
+        <div id="weather-temp" class="weather-card__temp">--°</div>
+      </div>
+    </div>
+    <div class="weather-card__meta">
+      <div class="weather-meta-item"><span>Ощущается</span><strong id="weather-feels">--°</strong></div>
+      <div class="weather-meta-item"><span>Ветер</span><strong id="weather-wind">--</strong></div>
+      <div class="weather-meta-item"><span>Влажность</span><strong id="weather-humidity">--</strong></div>
+      <div class="weather-meta-item"><span>Осадки</span><strong id="weather-rain">--</strong></div>
+    </div>
+    <div class="weather-days">
+      <div class="weather-days__title">Прогноз на дни</div>
+      <div id="weather-days-forecast" class="weather-days__grid"></div>
+    </div>
+    <div id="weather-updated" class="weather-card__updated">Обновление…</div>
+  </div>
+</div>
+
+<!-- Шторка внимания -->
+<div id="attention-drawer" class="picker-drawer left-drawer">
+  <div class="drawer-header"><span class="drawer-title">Внимание</span><button class="drawer-close" id="attention-drawer-close">✕</button></div>
+  <div class="attention-card">
+    
+    <div id="attention-context" class="attention-context">
+      <span id="attention-net">—</span>
+      <span class="attention-context__dot">·</span>
+      <span id="attention-weather">—</span>
+    </div>
+    <div id="attention-event" class="attention-card__event" aria-live="polite"></div>
+    <div class="attention-card__top">
+      <div class="attention-card__eyebrow">Состояние движения</div>
+      <div id="attention-status" class="attention-card__status">Спокойно</div>
+    </div>
+    <div id="attention-details" class="attention-card__details">
+      <div class="attention-card__grid">
+        <div class="attention-item" id="attention-state-item" data-icon="◎">
+          <span>Состояние</span>
+          <strong id="attention-state-value">Стабильно</strong>
+        </div>
+        <div class="attention-item attention-item--speed" id="attention-speed-item" data-icon="↗">
+          <span>Скорость</span>
+          <strong id="attention-speed-value">Стоянка</strong>
+          <em id="attention-speed-limit">лимит —</em>
+        </div>
+        <div class="attention-item" id="attention-points-item" data-icon="⌁">
+          <span>Режим</span>
+          <strong id="attention-points-value">Нет данных</strong>
+        </div>
+        <div class="attention-item" id="attention-gps-item" data-icon="⌖">
+          <span>GPS</span>
+          <strong id="attention-gps-value">Поиск</strong>
+          <em id="attention-gps-direction">—</em>
+        </div>
+      </div>
+      <div class="attention-card__note"><span id="attention-drive-time">—</span><span> · Детали открываются автоматически только при важных событиях.</span></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Шторка HUD-навигации -->
+<div id="hudnav-drawer" class="picker-drawer left-drawer">
+  <div class="drawer-header"><span class="drawer-title">Навигация</span><button class="drawer-close" id="hudnav-drawer-close">✕</button></div>
+  <div class="hudnavi-card">
+    <div id="navi-active" style="display:none">
+      <div id="navi-maneuver">
+        <div id="navi-arrow"><img id="navi-arrow-img" src="icons/navi/turn_9_straight.svg" alt=""></div>
+        <div id="navi-info">
+          <div id="navi-distance">—</div>
+          <div id="navi-street">—</div>
+        </div>
+        <div id="navi-speed-sign" style="display:none">
+          <span id="navi-speed-limit">—</span>
+        </div>
+      </div>
+      <div id="navi-route-bar">
+        <div id="navi-route-fill"></div>
+        <div id="navi-car"><img src="icons/navi/main_arrow.svg" id="navi-car-img" alt=""></div>
+      </div>
+      <div id="navi-finish-row" style="display:none">
+        <div class="hudnavi-finish-text">Вы прибыли в пункт назначения</div>
+        <button id="btn-navi-finish" class="hudnavi-finish-btn">
+          <span>🏁</span><span>Завершить маршрут</span>
+        </button>
+      </div>
+      <div id="navi-eta-row">
+        <div class="hudnavi-meta"><span id="navi-eta">—</span><span class="hudnavi-meta-label">время в пути</span></div>
+        <div class="hudnavi-meta"><span id="navi-remain">—</span><span class="hudnavi-meta-label">до финиша</span></div>
+      </div>
+    </div>
+    <div id="navi-inactive">
+      <div class="hudnavi-empty-title">Маршрут не активен</div>
+      <div class="hudnavi-empty-subtitle">Открой карты или передай HUD-данные в проект.</div>
+      <button id="btn-open-yandex-maps" class="hudnavi-launch-btn">
+        <img src="img/maps_icon.webp" alt="">
+        <div class="hudnavi-launch-text">
+          <div class="hudnavi-launch-title">Яндекс Карты</div>
+          <div class="hudnavi-launch-subtitle">Открыть карты</div>
+        </div>
+      </button>
+      <div class="hudnavi-help">Для внешней интеграции используй:<br><code>window.handleNaviData({...})</code></div>
+    </div>
+  </div>
+</div>
+
+<!-- Шторка климата -->
+<div id="climate-picker" class="picker-drawer">
+  <div class="drawer-header"><span class="drawer-title">Выберите функцию</span><button class="drawer-close" id="climate-picker-close">✕</button></div>
+  <div id="climate-picker-grid" class="picker-grid"></div>
+</div>
+
+<!-- Пикер приложений -->
+<div id="app_picker" class="picker-drawer left-drawer">
+  <div class="drawer-header"><span class="drawer-title">Выберите приложение</span><button class="drawer-close" id="app-picker-close">✕</button></div>
+  <div id="app-picker-grid" class="picker-grid"></div>
+</div>
+
+
+<!-- Плавающий HUD движения -->
+<div id="drive-hud" class="drive-hud" aria-live="polite">
+  <div id="drive-hud-speed" class="drive-hud__speed">—</div>
+  <div id="drive-hud-status" class="drive-hud__status">GPS</div>
+</div>
+
+<!-- Индикатор загрузки (глобальный) -->
+<div id="global-loader" class="global-loader hidden">
+  <div class="spinner"></div>
+</div>
+
+<script src="./app.js"></script>
+</div>
+</body>
+</html>

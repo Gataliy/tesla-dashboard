@@ -1,0 +1,7 @@
+{
+  "id": "tomsk_324",
+  "name": "Tomsk_PREVIEW_darker_glass",
+  "version": "preview-darker-glass",
+  "entry": "index.html",
+  "description": "Release build from Tomsk fast local folder branch for machine compatibility"
+}
