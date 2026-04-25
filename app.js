@@ -4312,21 +4312,26 @@ function __getGpsSpeedKmh(coords) {
 
 
 
+
+
+
 /* ==========================================================
-   SAFE GPS OVERLAY
-   - не трогает шторку «Внимание»
-   - не меняет кнопку
-   - GPS появляется отдельной небольшой карточкой
-   - запрос GPS не чаще 1 раза в 2 минуты
+   AUTO GPS — safe car mode
+   - не ломает кнопку «Внимание»
+   - GPS появляется отдельной карточкой
+   - автообновление только когда карточка открыта
+   - запрос не чаще 1 раза в 60 секунд
    ========================================================== */
 (function () {
-  const CACHE_KEY = "tomsk_safe_gps_overlay_cache";
+  const CACHE_KEY = "tomsk_auto_gps_cache";
   const CACHE_TTL = 1000 * 60 * 10;
-  const MIN_INTERVAL = 1000 * 60 * 2;
+  const MIN_INTERVAL = 1000 * 60;
+  const AUTO_REFRESH_INTERVAL = 1000 * 60;
 
   let visible = false;
   let busy = false;
   let lastRequestAt = 0;
+  let autoTimer = null;
 
   function readCache() {
     try {
@@ -4370,6 +4375,10 @@ function __getGpsSpeedKmh(coords) {
           <span>Точность</span>
           <b id="gpsSafeAccuracy">—</b>
         </div>
+        <div class="gps-safe-line">
+          <span>Обновление</span>
+          <b id="gpsSafeUpdated">—</b>
+        </div>
       </div>
     `;
 
@@ -4390,6 +4399,7 @@ function __getGpsSpeedKmh(coords) {
     if (!data) {
       setText("gpsSafeMotion", "Стоянка");
       setText("gpsSafeAccuracy", "—");
+      setText("gpsSafeUpdated", "—");
       return;
     }
 
@@ -4398,20 +4408,26 @@ function __getGpsSpeedKmh(coords) {
 
     setText("gpsSafeMotion", kmh < 3 ? "Стоянка" : "Движение");
     setText("gpsSafeAccuracy", data.accuracy ? `≈ ${Math.round(data.accuracy)} м` : "—");
+
+    const date = new Date(data.savedAt || Date.now());
+    setText(
+      "gpsSafeUpdated",
+      date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+    );
   }
 
   function canRequest() {
     return Date.now() - lastRequestAt > MIN_INTERVAL;
   }
 
-  function requestGps() {
+  function requestGps(force = false) {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
         resolve(null);
         return;
       }
 
-      if (busy || !canRequest()) {
+      if (busy || (!force && !canRequest())) {
         resolve(readCache());
         return;
       }
@@ -4424,7 +4440,8 @@ function __getGpsSpeedKmh(coords) {
           busy = false;
           const data = {
             accuracy: pos.coords.accuracy,
-            speed: pos.coords.speed || 0
+            speed: pos.coords.speed || 0,
+            savedAt: Date.now()
           };
           saveCache(data);
           resolve(data);
@@ -4442,25 +4459,47 @@ function __getGpsSpeedKmh(coords) {
     });
   }
 
+  async function refreshGps(force = false) {
+    const cached = readCache();
+
+    if (cached) render(cached, "Из кэша");
+    else render(null, "Обновление…");
+
+    const fresh = await requestGps(force);
+
+    if (!visible) return;
+
+    if (fresh) render(fresh, "Активен");
+    else render(null, "Нет доступа");
+  }
+
+  function startAutoGps() {
+    stopAutoGps();
+    autoTimer = setInterval(() => {
+      if (visible) refreshGps(false);
+    }, AUTO_REFRESH_INTERVAL);
+  }
+
+  function stopAutoGps() {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+  }
+
   async function showGpsOverlay() {
     visible = true;
     const overlay = createOverlay();
     overlay.classList.add("show");
 
-    const cached = readCache();
-    if (cached) render(cached, "Из кэша");
-    else render(null, "Обновление…");
-
-    const fresh = await requestGps();
-
-    if (visible) {
-      if (fresh) render(fresh, "Активен");
-      else render(null, "Нет доступа");
-    }
+    await refreshGps(true);
+    startAutoGps();
   }
 
   function hideGpsOverlay() {
     visible = false;
+    stopAutoGps();
+
     const overlay = document.getElementById("gpsSafeOverlay");
     if (overlay) overlay.classList.remove("show");
   }
@@ -4485,9 +4524,11 @@ function __getGpsSpeedKmh(coords) {
 
   document.addEventListener("DOMContentLoaded", () => {
     createOverlay();
+    const cached = readCache();
+    if (cached) render(cached, "Из кэша");
   });
 
-  // Важно: не preventDefault, не stopPropagation — кнопку не ломаем
+  // Не ломаем кнопку: не preventDefault и не stopPropagation
   document.addEventListener("click", (event) => {
     if (!isAttentionButtonClick(event)) return;
 
@@ -4504,91 +4545,681 @@ function __getGpsSpeedKmh(coords) {
     if (event.key === "Escape") hideGpsOverlay();
   });
 
-  window.TomskSafeGPSOverlay = {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopAutoGps();
+    else if (visible) startAutoGps();
+  });
+
+  window.TomskAutoGPS = {
     show: showGpsOverlay,
     hide: hideGpsOverlay,
+    refresh: () => refreshGps(true),
     clear: () => localStorage.removeItem(CACHE_KEY)
   };
 })();
 
 
 
-/* ===== TESLA PLAYER IMPROVEMENT ===== */
+/* ==========================================================
+   GPS -> WEATHER LINK
+   - погода берёт координаты из GPS
+   - если GPS недоступен: IP fallback
+   - если всё недоступно: Томск
+   - кэш координат и погоды
+   ========================================================== */
 (function () {
-  let isPlaying = false;
-  let progress = 0;
-  let duration = 180;
+  const GPS_WEATHER_CACHE = "tomsk_gps_weather_coords_v1";
+  const WEATHER_CACHE = "tomsk_gps_weather_data_v1";
+  const COORDS_TTL = 1000 * 60 * 20;
+  const WEATHER_TTL = 1000 * 60 * 10;
+  const DEFAULT = { lat: 56.4846, lon: 84.9486, city: "Томск", source: "default" };
 
-  function formatTime(sec) {
-    sec = Math.floor(sec);
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return m + ":" + (s < 10 ? "0" : "") + s;
+  function readCache(key, ttl) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (Date.now() - data.savedAt > ttl) return null;
+      return data.value;
+    } catch {
+      return null;
+    }
   }
 
-  function updateUI() {
-    const prog = document.getElementById("playerProgress");
-    const cur = document.getElementById("playerCurrent");
-    const dur = document.getElementById("playerDuration");
-    const btn = document.getElementById("playerPlay");
-
-    if (prog) prog.style.width = (progress / duration * 100) + "%";
-    if (cur) cur.textContent = formatTime(progress);
-    if (dur) dur.textContent = formatTime(duration);
-    if (btn) btn.textContent = isPlaying ? "⏸" : "▶️";
+  function saveCache(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value }));
+    } catch {}
   }
 
-  function tick() {
-    if (!isPlaying) return;
-    progress += 0.5;
-    if (progress >= duration) {
-      progress = 0;
-      isPlaying = false;
-    }
-    updateUI();
-    requestAnimationFrame(tick);
+  function getGpsCoords() {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          resolve({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            source: "gps"
+          });
+        },
+        () => resolve(null),
+        {
+          enableHighAccuracy: false,
+          timeout: 7000,
+          maximumAge: 1000 * 60 * 10
+        }
+      );
+    });
   }
 
-  document.addEventListener("click", (e) => {
-    const t = e.target;
+  async function getIpCoords() {
+    try {
+      const res = await fetch("https://ipapi.co/json/");
+      const data = await res.json();
+      if (!data.latitude || !data.longitude) return null;
 
-    if (t.id === "playerPlay") {
-      isPlaying = !isPlaying;
-      updateUI();
-      if (isPlaying) tick();
+      return {
+        lat: data.latitude,
+        lon: data.longitude,
+        city: data.city || "Город",
+        source: "ip"
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function getBestCoords(force = false) {
+    if (!force) {
+      const cached = readCache(GPS_WEATHER_CACHE, COORDS_TTL);
+      if (cached) return cached;
     }
 
-    if (t.id === "playerNext" || t.id === "playerPrev") {
-      progress = 0;
-      updateUI();
+    let coords = await getGpsCoords();
+
+    if (!coords) {
+      coords = await getIpCoords();
     }
-  });
+
+    if (!coords) {
+      coords = DEFAULT;
+    }
+
+    saveCache(GPS_WEATHER_CACHE, coords);
+    return coords;
+  }
+
+  function weatherInfo(code) {
+    if (code === 0) return { text: "Ясно", icon: "☀️" };
+    if ([1,2].includes(code)) return { text: "Переменная облачность", icon: "🌤️" };
+    if (code === 3) return { text: "Пасмурно", icon: "☁️" };
+    if ([45,48].includes(code)) return { text: "Туман", icon: "🌫️" };
+    if ([51,53,55,61,63,65,80,81,82].includes(code)) return { text: "Дождь", icon: "🌧️" };
+    if ([71,73,75,77,85,86].includes(code)) return { text: "Снег", icon: "❄️" };
+    if ([95,96,99].includes(code)) return { text: "Гроза", icon: "⛈️" };
+    return { text: "Погода", icon: "☁️" };
+  }
+
+  async function fetchWeather(coords) {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
+      `&current=temperature_2m,weather_code,wind_speed_10m,precipitation,relative_humidity_2m&timezone=auto`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    const c = data.current || {};
+
+    return {
+      temp: Math.round(c.temperature_2m),
+      code: c.weather_code,
+      wind: Math.round(c.wind_speed_10m || 0),
+      rain: c.precipitation ?? 0,
+      humidity: c.relative_humidity_2m ?? null,
+      city: coords.city || (coords.source === "gps" ? "GPS" : DEFAULT.city),
+      source: coords.source,
+      time: c.time || new Date().toISOString()
+    };
+  }
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function renderWeather(w, fromCache) {
+    if (!w) return;
+
+    const info = weatherInfo(w.code);
+
+    setText("weatherTemp", `${w.temp}°`);
+    setText("weatherIcon", info.icon);
+    setText("weatherDesc", info.text);
+    setText("weatherWind", `${w.wind} км/ч`);
+    setText("weatherRain", `${w.rain} мм`);
+    setText("weatherUpdated", fromCache ? "из кэша" : "сейчас");
+
+    // город: если GPS — не пишем "GPS", оставляем текущий город/Томск
+    const cityText = w.city && w.city !== "GPS" ? w.city : "Томск";
+    setText("weatherCity", cityText.toUpperCase());
+    setText("cityName", cityText.toUpperCase());
+    setText("locationName", cityText.toUpperCase());
+    setText("weatherLocation", cityText.toUpperCase());
+
+    const panel = document.getElementById("weatherPanelText");
+    if (panel) {
+      panel.textContent = `${info.text}. Температура ${w.temp}°C, ветер ${w.wind} км/ч, осадки ${w.rain} мм.`;
+    }
+  }
+
+  async function updateGpsWeather(force = false) {
+    if (!force) {
+      const cachedWeather = readCache(WEATHER_CACHE, WEATHER_TTL);
+      if (cachedWeather) renderWeather(cachedWeather, true);
+    }
+
+    try {
+      const coords = await getBestCoords(force);
+      const weather = await fetchWeather(coords);
+      saveCache(WEATHER_CACHE, weather);
+      renderWeather(weather, false);
+      return weather;
+    } catch {
+      const cachedWeather = readCache(WEATHER_CACHE, WEATHER_TTL);
+      if (cachedWeather) renderWeather(cachedWeather, true);
+    }
+  }
+
+  window.TomskGpsWeather = {
+    update: updateGpsWeather,
+    clear: () => {
+      localStorage.removeItem(GPS_WEATHER_CACHE);
+      localStorage.removeItem(WEATHER_CACHE);
+    }
+  };
 
   document.addEventListener("DOMContentLoaded", () => {
-    updateUI();
+    setTimeout(() => updateGpsWeather(false), 900);
+  });
+
+  document.addEventListener("click", (event) => {
+    const text = String(event.target?.textContent || "");
+    const id = event.target?.id || "";
+
+    if (id === "refreshWeatherBtn" || text.includes("Обновить погоду") || text.includes("Погода")) {
+      setTimeout(() => updateGpsWeather(true), 250);
+    }
   });
 })();
 
 
 
-document.addEventListener("DOMContentLoaded", () => {
-  const player = document.querySelector(".media-card");
-  if (!player || document.getElementById("playerPlay")) return;
+/* ==========================================================
+   YANDEX-LIKE WEATHER TEXT
+   - подача погоды человеческим языком
+   - ощущается как
+   - ветер/осадки/влажность словами
+   - не меняет GPS, кнопку «Внимание» и плеер
+   ========================================================== */
+(function () {
+  function feelsLike(temp, wind, humidity) {
+    let feels = Number(temp);
+    const w = Number(wind || 0);
+    const h = Number(humidity || 50);
 
-  const html = `
-    <div class="player-controls">
-      <button id="playerPrev">⏮</button>
-      <button id="playerPlay">▶️</button>
-      <button id="playerNext">⏭</button>
-    </div>
-    <div class="player-bar">
-      <div id="playerProgress" class="player-progress"></div>
-    </div>
-    <div class="player-time">
-      <span id="playerCurrent">0:00</span>
-      <span id="playerDuration">3:00</span>
-    </div>
-  `;
+    if (w > 15) feels -= 3;
+    else if (w > 8) feels -= 2;
+    else if (w > 4) feels -= 1;
 
-  player.insertAdjacentHTML("beforeend", html);
-});
+    if (h > 80 && temp < 10) feels -= 1;
+    if (h > 80 && temp > 20) feels += 1;
+
+    return Math.round(feels);
+  }
+
+  function windText(wind) {
+    const w = Number(wind || 0);
+    if (w < 5) return "ветер слабый";
+    if (w < 15) return "ветер умеренный";
+    if (w < 28) return "ветер заметный";
+    return "ветер сильный";
+  }
+
+  function rainText(rain, code) {
+    const r = Number(rain || 0);
+
+    if ([71, 73, 75, 77, 85, 86].includes(code)) {
+      if (r <= 0) return "возможен снег";
+      if (r < 1) return "лёгкий снег";
+      return "снег";
+    }
+
+    if ([95, 96, 99].includes(code)) return "возможна гроза";
+
+    if (r <= 0) {
+      if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return "возможен дождь";
+      return "без осадков";
+    }
+
+    if (r < 0.5) return "морось";
+    if (r < 2) return "лёгкий дождь";
+    return "дождь";
+  }
+
+  function humidityText(humidity) {
+    const h = Number(humidity || 0);
+    if (!h) return "";
+    if (h < 35) return "сухо";
+    if (h < 70) return "комфортно";
+    return "сыро";
+  }
+
+  function findWeatherTemp() {
+    const ids = ["weatherTemp", "weatherTemperature", "tempValue"];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      const match = String(el.textContent || "").match(/-?\d+/);
+      if (match) return Number(match[0]);
+    }
+    return null;
+  }
+
+  function readWeatherFromDOM() {
+    const temp = findWeatherTemp();
+
+    let desc = "";
+    const descEl = document.getElementById("weatherDesc") || document.querySelector(".weather-desc");
+    if (descEl) desc = String(descEl.textContent || "").trim();
+
+    let wind = 0;
+    const windEl = document.getElementById("weatherWind");
+    if (windEl) {
+      const m = String(windEl.textContent || "").match(/\d+/);
+      if (m) wind = Number(m[0]);
+    }
+
+    let rain = 0;
+    const rainEl = document.getElementById("weatherRain");
+    if (rainEl) {
+      const m = String(rainEl.textContent || "").replace(",", ".").match(/\d+(\.\d+)?/);
+      if (m) rain = Number(m[0]);
+    }
+
+    return { temp, desc, wind, rain, humidity: null, code: null };
+  }
+
+  function ensureYandexLine() {
+    let line = document.getElementById("yandexWeatherLine");
+    if (line) return line;
+
+    const weatherCard = document.querySelector(".weather-card") || document.querySelector("[class*='weather']");
+    if (!weatherCard) return null;
+
+    line = document.createElement("div");
+    line.id = "yandexWeatherLine";
+    line.className = "yandex-weather-line";
+
+    const desc = document.getElementById("weatherDesc") || weatherCard.querySelector(".weather-desc");
+    if (desc && desc.parentElement) {
+      desc.insertAdjacentElement("afterend", line);
+    } else {
+      weatherCard.appendChild(line);
+    }
+
+    return line;
+  }
+
+  function ensureDetailsLine() {
+    let line = document.getElementById("yandexWeatherDetails");
+    if (line) return line;
+
+    const weatherCard = document.querySelector(".weather-card") || document.querySelector("[class*='weather']");
+    if (!weatherCard) return null;
+
+    line = document.createElement("div");
+    line.id = "yandexWeatherDetails";
+    line.className = "yandex-weather-details";
+
+    const mainLine = ensureYandexLine();
+    if (mainLine) mainLine.insertAdjacentElement("afterend", line);
+    else weatherCard.appendChild(line);
+
+    return line;
+  }
+
+  function renderYandexWeather(weather) {
+    if (!weather) weather = readWeatherFromDOM();
+
+    if (weather.temp == null || Number.isNaN(weather.temp)) return;
+
+    const f = feelsLike(weather.temp, weather.wind, weather.humidity);
+    const wind = windText(weather.wind);
+    const rain = rainText(weather.rain, weather.code);
+    const humidity = humidityText(weather.humidity);
+
+    const line = ensureYandexLine();
+    if (line) {
+      line.textContent = `ощущается как ${f}°`;
+    }
+
+    const details = ensureDetailsLine();
+    if (details) {
+      details.textContent = humidity ? `${wind} · ${rain} · ${humidity}` : `${wind} · ${rain}`;
+    }
+
+    const panel = document.getElementById("weatherPanelText");
+    if (panel) {
+      const desc = weather.desc || (document.getElementById("weatherDesc")?.textContent || "Погода");
+      panel.textContent = `${desc}. Ощущается как ${f}°. ${wind}, ${rain}${humidity ? ", " + humidity : ""}.`;
+    }
+  }
+
+  // Перехватываем renderWeather мягко, если он глобальный
+  const oldRender = window.renderWeather;
+  if (typeof oldRender === "function") {
+    window.renderWeather = function (w, fromCache) {
+      oldRender.apply(this, arguments);
+      setTimeout(() => renderYandexWeather(w), 50);
+    };
+  }
+
+  // Перехватываем обновление GPS-погоды, если модуль есть
+  function patchGpsWeather() {
+    if (!window.TomskGpsWeather || window.TomskGpsWeather.__yandexPatched) return;
+
+    const oldUpdate = window.TomskGpsWeather.update;
+    if (typeof oldUpdate === "function") {
+      window.TomskGpsWeather.update = async function () {
+        const result = await oldUpdate.apply(this, arguments);
+        setTimeout(() => renderYandexWeather(result), 80);
+        return result;
+      };
+      window.TomskGpsWeather.__yandexPatched = true;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(patchGpsWeather, 300);
+    setTimeout(() => renderYandexWeather(), 1200);
+    setTimeout(() => renderYandexWeather(), 2500);
+  });
+
+  document.addEventListener("click", (event) => {
+    const text = String(event.target?.textContent || "");
+    const id = event.target?.id || "";
+    if (id === "refreshWeatherBtn" || text.includes("Погода") || text.includes("Обновить погоду")) {
+      setTimeout(patchGpsWeather, 100);
+      setTimeout(() => renderYandexWeather(), 1200);
+    }
+  });
+
+  // если данные погоды перерисовались другим кодом — мягко обновим текст
+  const observer = new MutationObserver(() => {
+    clearTimeout(window.__yandexWeatherTimer);
+    window.__yandexWeatherTimer = setTimeout(() => renderYandexWeather(), 120);
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const card = document.querySelector(".weather-card") || document.querySelector("[class*='weather']");
+    if (card) {
+      observer.observe(card, { childList: true, subtree: true, characterData: true });
+    }
+  });
+})();
+
+
+
+/* ==========================================================
+   GPS FORCE FIX FOR iPHONE
+   - принудительный запуск GPS через watchPosition
+   - координаты сохраняются в кэш погоды
+   - обновляет погоду по GPS
+   - не трогает кнопку «Внимание»
+   ========================================================== */
+(function () {
+  const GPS_WEATHER_CACHE = "tomsk_gps_weather_coords_v1";
+  const WEATHER_CACHE = "tomsk_gps_weather_data_v1";
+
+  let watchId = null;
+  let lastWeatherUpdateAt = 0;
+  const WEATHER_INTERVAL = 1000 * 60 * 5;
+
+  const DEFAULT = {
+    lat: 56.4846,
+    lon: 84.9486,
+    city: "Томск",
+    source: "default"
+  };
+
+  function saveCache(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        savedAt: Date.now(),
+        value
+      }));
+    } catch {}
+  }
+
+  function weatherInfo(code) {
+    if (code === 0) return { text: "Ясно", icon: "☀️" };
+    if ([1, 2].includes(code)) return { text: "Переменная облачность", icon: "🌤️" };
+    if (code === 3) return { text: "Пасмурно", icon: "☁️" };
+    if ([45, 48].includes(code)) return { text: "Туман", icon: "🌫️" };
+    if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return { text: "Дождь", icon: "🌧️" };
+    if ([71, 73, 75, 77, 85, 86].includes(code)) return { text: "Снег", icon: "❄️" };
+    if ([95, 96, 99].includes(code)) return { text: "Гроза", icon: "⛈️" };
+    return { text: "Погода", icon: "☁️" };
+  }
+
+  async function reverseCity(lat, lon) {
+    try {
+      const url =
+        `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}` +
+        `&longitude=${lon}&language=ru&format=json`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const first = data.results && data.results[0];
+
+      return first?.name || DEFAULT.city;
+    } catch {
+      return DEFAULT.city;
+    }
+  }
+
+  async function fetchWeather(lat, lon, city) {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation,relative_humidity_2m&timezone=auto`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    const c = data.current || {};
+
+    return {
+      temp: Math.round(c.temperature_2m),
+      feels: Math.round(c.apparent_temperature ?? c.temperature_2m),
+      code: c.weather_code,
+      wind: Math.round(c.wind_speed_10m || 0),
+      rain: c.precipitation ?? 0,
+      humidity: c.relative_humidity_2m ?? null,
+      city: city || DEFAULT.city,
+      source: "gps",
+      time: c.time || new Date().toISOString()
+    };
+  }
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function updateCityUI(city) {
+    const value = (city || DEFAULT.city).toUpperCase();
+
+    ["weatherCity", "cityName", "locationName", "weatherLocation"].forEach((id) => {
+      setText(id, value);
+    });
+
+    document.querySelectorAll(".weather-city").forEach((el) => {
+      el.textContent = value;
+    });
+  }
+
+  function updateWeatherUI(w) {
+    if (!w) return;
+
+    const info = weatherInfo(w.code);
+
+    setText("weatherTemp", `${w.temp}°`);
+    setText("weatherIcon", info.icon);
+    setText("weatherDesc", info.text);
+    setText("weatherWind", `${w.wind} км/ч`);
+    setText("weatherRain", `${w.rain} мм`);
+    setText("weatherUpdated", "по GPS");
+    updateCityUI(w.city);
+
+    const panel = document.getElementById("weatherPanelText");
+    if (panel) {
+      panel.textContent = `${info.text}. Ощущается как ${w.feels}°. Ветер ${w.wind} км/ч, осадки ${w.rain} мм.`;
+    }
+
+    const yLine = document.getElementById("yandexWeatherLine");
+    if (yLine) yLine.textContent = `ощущается как ${w.feels}°`;
+
+    const yDetails = document.getElementById("yandexWeatherDetails");
+    if (yDetails) {
+      const windText = w.wind < 5 ? "ветер слабый" : w.wind < 15 ? "ветер умеренный" : "ветер заметный";
+      const rainText = Number(w.rain || 0) <= 0 ? "без осадков" : Number(w.rain) < 1 ? "лёгкий дождь" : "дождь";
+      const humText = w.humidity == null ? "" : (w.humidity < 35 ? "сухо" : w.humidity < 70 ? "комфортно" : "сыро");
+      yDetails.textContent = humText ? `${windText} · ${rainText} · ${humText}` : `${windText} · ${rainText}`;
+    }
+  }
+
+  async function updateWeatherFromCoords(lat, lon) {
+    if (Date.now() - lastWeatherUpdateAt < WEATHER_INTERVAL) return;
+    lastWeatherUpdateAt = Date.now();
+
+    try {
+      const city = await reverseCity(lat, lon);
+
+      const coords = {
+        lat,
+        lon,
+        city,
+        source: "gps",
+        accuracy: window.__tomskLastGpsAccuracy || null
+      };
+
+      saveCache(GPS_WEATHER_CACHE, coords);
+      updateCityUI(city);
+
+      const weather = await fetchWeather(lat, lon, city);
+      saveCache(WEATHER_CACHE, weather);
+      updateWeatherUI(weather);
+
+      if (window.TomskAttentionGpsStatus?.update) {
+        window.TomskAttentionGpsStatus.update();
+      }
+    } catch (e) {
+      console.log("GPS weather update failed:", e);
+    }
+  }
+
+  function updateMotionUI(pos) {
+    const speed = pos.coords.speed || 0;
+    const kmh = speed * 3.6;
+    const motion = kmh < 3 ? "Стоянка" : "Движение";
+
+    window.__tomskLastGpsAccuracy = pos.coords.accuracy;
+
+    setText("gpsSafeStatus", "Активен");
+    setText("gpsSafeMotion", motion);
+    setText("gpsSafeAccuracy", pos.coords.accuracy ? `≈ ${Math.round(pos.coords.accuracy)} м` : "—");
+
+    const updated = document.getElementById("gpsSafeUpdated");
+    if (updated) {
+      updated.textContent = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    const candidates = Array.from(document.querySelectorAll("strong, b, div, span, p"));
+    const motionEl = candidates.find((el) => {
+      const t = String(el.textContent || "").trim();
+      return t === "Стоянка" || t === "Движение";
+    });
+
+    if (motionEl) motionEl.textContent = motion;
+  }
+
+  function startGpsForce() {
+    if (!navigator.geolocation) {
+      console.log("GPS not supported");
+      return;
+    }
+
+    if (watchId !== null) return;
+
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+
+          console.log("Tomsk GPS OK:", lat, lon, "accuracy:", pos.coords.accuracy);
+
+          updateMotionUI(pos);
+          updateWeatherFromCoords(lat, lon);
+        },
+        (err) => {
+          console.log("Tomsk GPS ERROR:", err.code, err.message);
+          setText("gpsSafeStatus", "Нет доступа");
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000 * 60 * 2,
+          timeout: 15000
+        }
+      );
+    } catch (e) {
+      console.log("Tomsk GPS start failed:", e);
+    }
+  }
+
+  function stopGpsForce() {
+    if (watchId !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+  }
+
+  window.TomskGPSForceFix = {
+    start: startGpsForce,
+    stop: stopGpsForce,
+    refresh: () => {
+      stopGpsForce();
+      setTimeout(startGpsForce, 250);
+    }
+  };
+
+  window.addEventListener("load", () => {
+    setTimeout(startGpsForce, 1000);
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopGpsForce();
+    } else {
+      setTimeout(startGpsForce, 500);
+    }
+  });
+
+  document.addEventListener("click", () => {
+    startGpsForce();
+  }, { once: true });
+})();

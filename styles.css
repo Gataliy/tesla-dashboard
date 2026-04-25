@@ -3244,113 +3244,40 @@ body.attention-open #attentionBtn {
 
 
 
-/* SAFE SMOOTH — лёгкая плавность без вмешательства в JS */
-:root {
-  --safe-ease: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* мягкий старт интерфейса */
-body {
-  animation: safeBodyIn .35s var(--safe-ease) both;
-}
-
-@keyframes safeBodyIn {
-  from {
-    opacity: 0;
-    filter: blur(4px);
-  }
-  to {
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-/* плавные карточки */
-.glass,
-.weather-card,
-.media-card,
-.clock-card,
-.apps-card,
-.status-card,
-.app-btn {
-  transition:
-    transform .18s var(--safe-ease),
-    opacity .18s ease,
-    background .18s ease,
-    border-color .18s ease,
-    box-shadow .18s ease;
-}
-
-/* кнопки без прыжков */
-button,
-.app-btn {
-  -webkit-tap-highlight-color: transparent;
-}
-
-button:active,
-.app-btn:active {
-  transform: scale(0.985);
-}
-
-/* плавность overlay GPS */
-#gpsSafeOverlay {
-  transition:
-    opacity .22s ease,
-    transform .22s var(--safe-ease);
-}
-
-/* плавный прогресс плеера */
-.progress-fill,
-[class*="progress"] > * {
-  transition: width .25s linear;
-}
-
-/* уважает настройки снижения анимации */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    transition-duration: 1ms !important;
-  }
+/* AUTO GPS extra line */
+#gpsSafeUpdated {
+  opacity: .85;
 }
 
 
 
-/* ===== TESLA PLAYER CLEAN ===== */
-.player-controls {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  margin-top: 8px;
+/* Yandex-like weather text — мягко, без перегруза */
+.yandex-weather-line {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.25;
+  color: rgba(255,255,255,0.72);
 }
 
-.player-controls button {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
-  padding: 6px 10px;
-  color: white;
-}
-
-.player-bar {
-  height: 3px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 3px;
-  overflow: hidden;
+.yandex-weather-details {
   margin-top: 6px;
+  max-width: 92%;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255,255,255,0.52);
 }
 
-.player-progress {
-  height: 100%;
-  width: 0%;
-  background: white;
-  transition: width 0.2s linear;
+.weather-card .yandex-weather-details,
+.weather-card .yandex-weather-line {
+  text-wrap: balance;
 }
 
-.player-time {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  opacity: 0.6;
+
+
+/* GPS force fix compatibility */
+#gpsSafeStatus,
+#gpsSafeMotion,
+#gpsSafeAccuracy,
+#gpsSafeUpdated {
+  font-variant-numeric: tabular-nums;
 }
