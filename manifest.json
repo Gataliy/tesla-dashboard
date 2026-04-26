@@ -1,7 +1,26 @@
 {
-  "id": "tomsk_324",
-  "name": "Tomsk_PREVIEW_darker_glass",
-  "version": "preview-darker-glass",
-  "entry": "index.html",
-  "description": "Release build from Tomsk fast local folder branch for machine compatibility"
+  "name": "Tomsk 324",
+  "short_name": "Tomsk 324",
+  "description": "Автомобильный дашборд Tomsk 324",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#080a0f",
+  "theme_color": "#080a0f",
+  "lang": "ru-RU",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }

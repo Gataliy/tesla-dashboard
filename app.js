@@ -1,5 +1,162 @@
 
 /* ==========================================================
+   MINI KALMAN FILTER FOR GPS SPEED
+   - сглаживает скорость GPS
+   - уменьшает ложные переключения Стоянка/Движение
+   ========================================================== */
+(function () {
+  class MiniKalmanFilter {
+    constructor({ R = 0.01, Q = 3 } = {}) {
+      this.R = R;
+      this.Q = Q;
+      this.A = 1;
+      this.C = 1;
+      this.cov = NaN;
+      this.x = NaN;
+    }
+
+    filter(value) {
+      const z = Number(value || 0);
+
+      if (Number.isNaN(this.x)) {
+        this.x = z;
+        this.cov = 1;
+      } else {
+        const predX = this.A * this.x;
+        const predCov = this.A * this.cov * this.A + this.R;
+        const K = predCov * this.C / (this.C * predCov * this.C + this.Q);
+
+        this.x = predX + K * (z - this.C * predX);
+        this.cov = predCov - K * this.C * predCov;
+      }
+
+      return this.x;
+    }
+
+    reset() {
+      this.cov = NaN;
+      this.x = NaN;
+    }
+  }
+
+  const speedFilter = new MiniKalmanFilter({ R: 0.01, Q: 3 });
+  let lastMotion = "Стоянка";
+
+  function getMotionBySpeed(speedMps) {
+    const filteredSpeed = speedFilter.filter(speedMps || 0);
+    const kmh = filteredSpeed * 3.6;
+
+    if (kmh > 8) lastMotion = "Движение";
+    else if (kmh < 3) lastMotion = "Стоянка";
+
+    return { motion: lastMotion, kmh, filteredSpeed };
+  }
+
+  window.TomskKalmanGPS = {
+    getMotionBySpeed,
+    reset: () => {
+      speedFilter.reset();
+      lastMotion = "Стоянка";
+    }
+  };
+})();
+
+
+
+/* ==========================================================
+   BIGDATACLOUD CITY RESOLVER
+   GPS -> BigDataCloud -> city
+   Open-Meteo remains for weather
+   ========================================================== */
+(function () {
+  const BDC_CACHE_KEY = "tomsk_bigdatacloud_city_cache_v1";
+  const BDC_CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+  function readCache(lat, lon) {
+    try {
+      const raw = localStorage.getItem(BDC_CACHE_KEY);
+      if (!raw) return null;
+
+      const data = JSON.parse(raw);
+      if (Date.now() - data.savedAt > BDC_CACHE_TTL) return null;
+
+      const dLat = Math.abs((data.lat || 0) - lat);
+      const dLon = Math.abs((data.lon || 0) - lon);
+      if (dLat > 0.25 || dLon > 0.25) return null;
+
+      return data.city || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveCache(lat, lon, city) {
+    try {
+      localStorage.setItem(BDC_CACHE_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        lat,
+        lon,
+        city
+      }));
+    } catch {}
+  }
+
+  async function getCity(lat, lon) {
+    const cached = readCache(lat, lon);
+    if (cached) return cached;
+
+    try {
+      const url =
+        "https://api.bigdatacloud.net/data/reverse-geocode-client" +
+        "?latitude=" + encodeURIComponent(lat) +
+        "&longitude=" + encodeURIComponent(lon) +
+        "&localityLanguage=ru";
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const city =
+        data.city ||
+        data.locality ||
+        data.principalSubdivision ||
+        data.countryName ||
+        null;
+
+      if (city) {
+        saveCache(lat, lon, city);
+        return city;
+      }
+    } catch (e) {
+      console.log("BigDataCloud error:", e);
+    }
+
+    return null;
+  }
+
+  function setCityUI(city) {
+    if (!city) return;
+    const value = String(city).toUpperCase();
+
+    ["weatherCity", "cityName", "locationName", "weatherLocation"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    });
+
+    document.querySelectorAll(".weather-city").forEach((el) => {
+      el.textContent = value;
+    });
+  }
+
+  window.TomskBigDataCloud = {
+    getCity,
+    setCityUI,
+    clear: () => localStorage.removeItem(BDC_CACHE_KEY)
+  };
+})();
+
+
+
+/* ==========================================================
    TESLA GPS MODE
    - GPS не запрашивается постоянно
    - быстрый старт через кэш
@@ -4404,9 +4561,11 @@ function __getGpsSpeedKmh(coords) {
     }
 
     const speed = data.speed || 0;
-    const kmh = speed * 3.6;
+    const motionData = window.TomskKalmanGPS
+      ? window.TomskKalmanGPS.getMotionBySpeed(speed)
+      : { motion: (speed * 3.6 < 3 ? "Стоянка" : "Движение"), kmh: speed * 3.6 };
 
-    setText("gpsSafeMotion", kmh < 3 ? "Стоянка" : "Движение");
+    setText("gpsSafeMotion", motionData.motion);
     setText("gpsSafeAccuracy", data.accuracy ? `≈ ${Math.round(data.accuracy)} м` : "—");
 
     const date = new Date(data.savedAt || Date.now());
@@ -5019,6 +5178,14 @@ function __getGpsSpeedKmh(coords) {
 
   async function reverseCity(lat, lon) {
     try {
+      if (window.TomskBigDataCloud?.getCity) {
+        const bdcCity = await window.TomskBigDataCloud.getCity(lat, lon);
+        if (bdcCity) {
+          window.TomskBigDataCloud.setCityUI(bdcCity);
+          return bdcCity;
+        }
+      }
+
       const url =
         `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}` +
         `&longitude=${lon}&language=ru&format=json`;
@@ -5134,8 +5301,11 @@ function __getGpsSpeedKmh(coords) {
 
   function updateMotionUI(pos) {
     const speed = pos.coords.speed || 0;
-    const kmh = speed * 3.6;
-    const motion = kmh < 3 ? "Стоянка" : "Движение";
+    const motionData = window.TomskKalmanGPS
+      ? window.TomskKalmanGPS.getMotionBySpeed(speed)
+      : { motion: (speed * 3.6 < 3 ? "Стоянка" : "Движение"), kmh: speed * 3.6 };
+    const kmh = motionData.kmh;
+    const motion = motionData.motion;
 
     window.__tomskLastGpsAccuracy = pos.coords.accuracy;
 
@@ -5222,4 +5392,197 @@ function __getGpsSpeedKmh(coords) {
   document.addEventListener("click", () => {
     startGpsForce();
   }, { once: true });
+})();
+
+
+
+/* ==========================================================
+   TIGGO / ANDROID MODE
+   - Android WebView / Tiggo ready
+   - safe bridge hooks
+   ========================================================== */
+(function () {
+  const isAndroid =
+    /Android/i.test(navigator.userAgent) ||
+    !!window.Android ||
+    !!window.TiggoBridge;
+
+  function callBridge(method, ...args) {
+    const bridge = window.Android || window.TiggoBridge;
+    try {
+      if (bridge && typeof bridge[method] === "function") {
+        return bridge[method](...args);
+      }
+    } catch (e) {
+      console.log("Bridge error:", method, e);
+    }
+    return null;
+  }
+
+  function enterFullscreen() {
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch {}
+  }
+
+  function setupMediaBridge() {
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!target) return;
+      if (target.id === "playerPlay") callBridge("playPause");
+      if (target.id === "playerNext") callBridge("next");
+      if (target.id === "playerPrev") callBridge("prev");
+    });
+  }
+
+  window.onAndroidMediaUpdate = function (title, artist, source) {
+    const titleEl = document.getElementById("trackTitle") || document.querySelector(".track-title");
+    const artistEl = document.getElementById("trackArtist") || document.querySelector(".track-artist");
+    const sourceEl = document.getElementById("trackSource") || document.querySelector(".track-source");
+
+    if (titleEl && title) titleEl.textContent = title;
+    if (artistEl && artist) artistEl.textContent = artist;
+    if (sourceEl && source) sourceEl.textContent = source;
+  };
+
+  window.onAndroidLocation = function (lat, lon, accuracy, speed) {
+    try {
+      const speedValue = Number(speed || 0);
+      const motionData = window.TomskKalmanGPS
+        ? window.TomskKalmanGPS.getMotionBySpeed(speedValue)
+        : { motion: speedValue * 3.6 < 3 ? "Стоянка" : "Движение" };
+
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+
+      setText("gpsSafeStatus", "Активен");
+      setText("gpsSafeMotion", motionData.motion);
+      setText("gpsSafeAccuracy", accuracy ? `≈ ${Math.round(Number(accuracy))} м` : "—");
+    } catch (e) {
+      console.log("Android location update error:", e);
+    }
+  };
+
+  window.TomskTiggo = {
+    enterFullscreen,
+    callBridge,
+    isAndroid: () => isAndroid
+  };
+
+  window.addEventListener("load", () => {
+    document.body.classList.add("tiggo-mode");
+    if (isAndroid) document.body.classList.add("android-mode");
+    setupMediaBridge();
+    setTimeout(() => callBridge("ready"), 500);
+  });
+
+  document.addEventListener("click", () => {
+    if (isAndroid) enterFullscreen();
+  }, { once: true });
+})();
+
+
+
+/* ==========================================================
+   SOFT PLAYER POLISH
+   - спокойная полировка плеера
+   - без перегруза
+   - Android Bridge остаётся
+   ========================================================== */
+(function () {
+  function findPlayer() {
+    return (
+      document.querySelector(".media-player") ||
+      document.querySelector(".player") ||
+      document.querySelector("[class*='player']") ||
+      document.querySelector("[class*='music']") ||
+      null
+    );
+  }
+
+  function applySoftPlayer() {
+    const player = findPlayer();
+    if (!player) return;
+
+    player.classList.add("soft-player-ui");
+
+    const title =
+      document.getElementById("trackTitle") ||
+      player.querySelector(".track-title") ||
+      player.querySelector("[data-track-title]");
+
+    const artist =
+      document.getElementById("trackArtist") ||
+      player.querySelector(".track-artist") ||
+      player.querySelector("[data-track-artist]");
+
+    const source =
+      document.getElementById("trackSource") ||
+      player.querySelector(".track-source") ||
+      player.querySelector("[data-track-source]");
+
+    if (title) title.classList.add("soft-track-title");
+    if (artist) artist.classList.add("soft-track-artist");
+    if (source) source.classList.add("soft-track-source");
+
+    player.querySelectorAll("button").forEach((btn) => {
+      btn.classList.add("soft-player-btn");
+    });
+
+    player.querySelectorAll('input[type="range"]').forEach((range) => {
+      range.classList.add("soft-player-range");
+    });
+  }
+
+  function bridge(method) {
+    const bridge = window.Android || window.TiggoBridge;
+    try {
+      if (bridge && typeof bridge[method] === "function") {
+        bridge[method]();
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  function setupBridgeControls() {
+    document.addEventListener("click", (event) => {
+      const btn = event.target.closest("button, .soft-player-btn, [role='button']");
+      if (!btn) return;
+
+      const text = String(btn.textContent || "").toLowerCase();
+      const id = String(btn.id || "").toLowerCase();
+      const cls = String(btn.className || "").toLowerCase();
+
+      if (id.includes("next") || cls.includes("next") || text.includes("⏭")) bridge("next");
+      if (id.includes("prev") || cls.includes("prev") || text.includes("⏮")) bridge("prev");
+      if (id.includes("play") || cls.includes("play") || text.includes("▶") || text.includes("⏸")) bridge("playPause");
+    });
+  }
+
+  const oldMediaUpdate = window.onAndroidMediaUpdate;
+  window.onAndroidMediaUpdate = function (title, artist, source) {
+    if (typeof oldMediaUpdate === "function") {
+      try { oldMediaUpdate(title, artist, source); } catch {}
+    }
+
+    setTimeout(applySoftPlayer, 50);
+  };
+
+  window.TomskSoftPlayer = {
+    refresh: applySoftPlayer
+  };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(applySoftPlayer, 500);
+    setupBridgeControls();
+  });
+
+  window.addEventListener("load", () => {
+    setTimeout(applySoftPlayer, 800);
+  });
 })();

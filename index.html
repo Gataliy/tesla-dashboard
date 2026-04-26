@@ -5,6 +5,16 @@
 <meta charset="utf-8">
 <title>Tomsk 324</title>
 <link rel="stylesheet" href="./styles.css">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#080a0f">
+  <meta name="screen-orientation" content="landscape">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tomsk 324">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 </head>
 <body>
 <div id="dashboard_bg"></div>
@@ -264,5 +274,16 @@
 
 <script src="./app.js"></script>
 </div>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./service-worker.js").catch(function (err) {
+        console.log("Service worker registration failed:", err);
+      });
+    });
+  }
+</script>
+
 </body>
 </html>

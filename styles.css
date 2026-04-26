@@ -3281,3 +3281,119 @@ body.attention-open #attentionBtn {
 #gpsSafeUpdated {
   font-variant-numeric: tabular-nums;
 }
+
+
+
+/* ==========================================================
+   TIGGO / ANDROID MODE
+   ========================================================== */
+body.tiggo-mode {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #080a0f;
+}
+
+body.tiggo-mode * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.tiggo-mode button,
+body.tiggo-mode .app-btn,
+body.tiggo-mode [role="button"] {
+  min-width: 56px;
+  min-height: 56px;
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+  body.tiggo-mode {
+    overflow: hidden;
+  }
+}
+
+@media (orientation: portrait) {
+  body.tiggo-mode::before {
+    content: "Поверните экран";
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: grid;
+    place-items: center;
+    background: #080a0f;
+    color: rgba(255,255,255,.86);
+    font-size: 22px;
+    letter-spacing: .02em;
+  }
+}
+
+
+
+/* ==========================================================
+   SOFT PLAYER POLISH — спокойно, как раньше, но аккуратнее
+   ========================================================== */
+
+.soft-player-ui {
+  border-radius: 20px !important;
+  background: rgba(18, 22, 29, 0.54) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 12px 30px rgba(0,0,0,0.18) !important;
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+}
+
+.soft-track-title,
+#trackTitle {
+  font-weight: 600 !important;
+  letter-spacing: -0.025em !important;
+  color: rgba(255,255,255,0.90) !important;
+}
+
+.soft-track-artist,
+#trackArtist {
+  margin-top: 2px;
+  font-weight: 400 !important;
+  color: rgba(255,255,255,0.56) !important;
+}
+
+.soft-track-source,
+#trackSource {
+  font-size: 12px;
+  color: rgba(255,255,255,0.48) !important;
+}
+
+.soft-player-btn,
+.soft-player-ui button {
+  border-radius: 999px !important;
+  background: rgba(255,255,255,0.055) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  color: rgba(255,255,255,0.82) !important;
+  box-shadow: none !important;
+  transition: transform .16s ease, background .16s ease, opacity .16s ease !important;
+}
+
+.soft-player-btn:active,
+.soft-player-ui button:active {
+  transform: scale(0.96);
+  background: rgba(255,255,255,0.09) !important;
+  opacity: .9;
+}
+
+.soft-player-range,
+.soft-player-ui input[type="range"] {
+  accent-color: rgba(255,255,255,0.72);
+  height: 3px;
+}
+
+.soft-player-ui img,
+.soft-player-ui .cover,
+.soft-player-ui [class*="cover"] {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.20);
+}
+
+.soft-player-ui * {
+  -webkit-tap-highlight-color: transparent;
+}
