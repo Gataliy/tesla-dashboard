@@ -3397,3 +3397,25 @@ body.tiggo-mode [role="button"] {
 .soft-player-ui * {
   -webkit-tap-highlight-color: transparent;
 }
+
+
+
+
+
+
+
+/* Clean final climate behavior */
+.climate-tap-soft,
+.climate-active-soft {
+  transform: scale(0.985);
+  opacity: .92;
+}
+
+[class*="climate"],
+.climate-button,
+.climate-btn,
+.climate-card,
+.climate-control {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}

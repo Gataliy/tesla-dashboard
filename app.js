@@ -4345,7 +4345,7 @@ function __getGpsSpeedKmh(coords) {
     return buttons.find((el) => {
       const text = String(el.textContent || "").trim();
       const panel = el.dataset?.panel || "";
-      return text.includes("Внимание") || panel === "attention" || panel === "attentionPanel" || el.id === "attentionBtn";
+      return text === "Внимание" || panel === "attention" || panel === "attentionPanel" || el.id === "attentionBtn";
     });
   }
 
@@ -4437,7 +4437,7 @@ function __getGpsSpeedKmh(coords) {
         btn.id === "attentionBtn" ||
         panel === "attention" ||
         panel === "attentionPanel" ||
-        text.includes("Внимание");
+        text === "Внимание";
 
       if (!isAttention) return;
 
@@ -4670,14 +4670,18 @@ function __getGpsSpeedKmh(coords) {
     const btn = target.closest ? target.closest("button, .app-btn, [role='button'], [data-panel]") : null;
     if (!btn) return false;
 
-    const text = String(btn.textContent || "");
+    const text = String(btn.textContent || "").trim();
+    const id = String(btn.id || "").trim();
     const panel = btn.dataset?.panel || "";
+    const aria = btn.getAttribute("aria-label") || "";
 
     return (
-      btn.id === "attentionBtn" ||
+      id === "attentionBtn" ||
+      id === "attentionButton" ||
       panel === "attention" ||
       panel === "attentionPanel" ||
-      text.includes("Внимание")
+      aria === "Внимание" ||
+      text === "Внимание"
     );
   }
 
@@ -4689,6 +4693,7 @@ function __getGpsSpeedKmh(coords) {
 
   // Не ломаем кнопку: не preventDefault и не stopPropagation
   document.addEventListener("click", (event) => {
+    if (event.__tomskNotAttention) return;
     if (!isAttentionButtonClick(event)) return;
 
     setTimeout(() => {
@@ -5585,4 +5590,56 @@ function __getGpsSpeedKmh(coords) {
   window.addEventListener("load", () => {
     setTimeout(applySoftPlayer, 800);
   });
+})();
+
+
+
+
+
+
+
+
+
+/* ==========================================================
+   CLEAN FINAL ATTENTION GUARD
+   - шторка «Внимание» открывается только по кнопке «Внимание»
+   - климат/плеер/прочие кнопки не открывают шторку
+   - не блокирует собственное действие кнопок
+   ========================================================== */
+(function () {
+  function isAttentionControl(target) {
+    if (!target || !target.closest) return false;
+
+    const btn = target.closest("button, .app-btn, [role='button'], [data-panel]");
+    if (!btn) return false;
+
+    const text = String(btn.textContent || "").trim();
+    const id = String(btn.id || "").trim();
+    const panel = btn.dataset?.panel || "";
+    const aria = btn.getAttribute("aria-label") || "";
+
+    return (
+      id === "attentionBtn" ||
+      id === "attentionButton" ||
+      panel === "attention" ||
+      panel === "attentionPanel" ||
+      aria === "Внимание" ||
+      text === "Внимание"
+    );
+  }
+
+  document.addEventListener("click", function (event) {
+    if (event.__tomskNotAttention) return;
+    const btn = event.target && event.target.closest
+      ? event.target.closest("button, .app-btn, [role='button'], [data-panel]")
+      : null;
+
+    if (!btn) return;
+
+    if (!isAttentionControl(btn)) {
+      event.__tomskNotAttention = true;
+    }
+  }, true);
+
+  window.TomskIsAttentionControl = isAttentionControl;
 })();
